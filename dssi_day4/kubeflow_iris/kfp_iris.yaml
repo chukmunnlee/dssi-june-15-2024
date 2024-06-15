@@ -1,0 +1,211 @@
+# PIPELINE DEFINITION
+# Name: iris-pipeline
+# Inputs:
+#    test_size: float
+components:
+  comp-load-data:
+    executorLabel: exec-load-data
+    inputDefinitions:
+      parameters:
+        test_size:
+          parameterType: NUMBER_DOUBLE
+    outputDefinitions:
+      artifacts:
+        test_out:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+        train_out:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+  comp-predict:
+    executorLabel: exec-predict
+    inputDefinitions:
+      artifacts:
+        model_in:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+        test_in:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      artifacts:
+        train_in:
+          artifactType:
+            schemaTitle: system.Artifact
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        model_out:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-load-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - load_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'scikit-learn'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef load_data(test_size: float\n      , train_out: dsl.OutputPath('numpy'),\
+          \ test_out: dsl.OutputPath('numpy')):\n\n   from sklearn.datasets import\
+          \ load_iris\n   from sklearn.model_selection import train_test_split\n \
+          \  import pickle\n\n   iris_data = load_iris()\n\n   X_data = iris_data.get('data')\n\
+          \   y_data = iris_data.get('target')\n\n   X_train, X_test, y_train, y_test\
+          \ = train_test_split(X_data, y_data, test_size=test_size)\n\n   # write\
+          \ train data \n   with open(train_out, \"wb\") as f:\n      pickle.dump((X_train,\
+          \ y_train), f)\n\n   # write test data \n   with open(test_out, \"wb\")\
+          \ as f:\n      pickle.dump((X_test, y_test), f)\n\n"
+        image: python:3.11
+    exec-predict:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - predict
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'scikit-learn'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef predict(test_in: dsl.InputPath('numpy'), model_in: dsl.InputPath('model')):\n\
+          \n   from sklearn import metrics\n   import pickle\n\n   # read test data\n\
+          \   with open(test_in, 'rb') as f:\n      X_test, y_test = pickle.load(f)\n\
+          \n   with open(model_in, 'rb') as f:\n      model = pickle.load(f)\n\n \
+          \  prediction_svm = model.predict(X_test)\n   score = metrics.accuracy_score(prediction_svm,\
+          \ y_test)\n\n   print('****** SVM accuracy: ', score)\n\n"
+        image: python:3.11
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'scikit-learn'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(train_in: dsl.InputPath('numpy'), model_out: dsl.OutputPath('model')):\n\
+          \   from sklearn import svm\n   import pickle\n\n   # read in the training\
+          \ data\n   with open(train_in, \"rb\") as f:\n      X_train, y_train = pickle.load(f)\n\
+          \n   # train\n   model_svm = svm.SVC()\n   model_svm.fit(X_train, y_train)\n\
+          \n   # save the trained model\n   with open(model_out, \"wb\") as f:\n \
+          \     pickle.dump(model_svm, f)\n\n"
+        image: python:3.11
+pipelineInfo:
+  name: iris-pipeline
+root:
+  dag:
+    tasks:
+      load-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-load-data
+        inputs:
+          parameters:
+            test_size:
+              componentInputParameter: test_size
+        taskInfo:
+          name: load-data
+      predict:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-predict
+        dependentTasks:
+        - load-data
+        - train-model
+        inputs:
+          artifacts:
+            model_in:
+              taskOutputArtifact:
+                outputArtifactKey: model_out
+                producerTask: train-model
+            test_in:
+              taskOutputArtifact:
+                outputArtifactKey: test_out
+                producerTask: load-data
+        taskInfo:
+          name: predict
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        dependentTasks:
+        - load-data
+        inputs:
+          artifacts:
+            train_in:
+              taskOutputArtifact:
+                outputArtifactKey: train_out
+                producerTask: load-data
+        taskInfo:
+          name: train-model
+  inputDefinitions:
+    parameters:
+      test_size:
+        parameterType: NUMBER_DOUBLE
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.7.0
