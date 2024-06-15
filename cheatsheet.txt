@@ -1,0 +1,27 @@
+Configure cluster
+  Save kubeconfig to $HOME/.kube as config
+
+Test cluster
+  kubectl cluster-info
+
+Install kubeflow
+- Go into dssi_day4/v2.2.0_kfp_manifests/kustomize
+- kubectl apply -k cluster-scoped-resources
+- Go into dssi_day4/v2.2.0_kfp_manifests/kustomize/env
+- kubectl apply -k platform-agnostic
+- Monitor your installation
+  kubectl get all,pvc -nkubeflow
+
+Access the kubeflow pipeline ui
+  kubectl port-forward svc/ml-pipeline-ui -nkubeflow 8080:80
+  open your browser on localhost:8080
+
+Compile pipeline
+	kfp dsl compile --py first_pipeline.py --output first_pipeline.yaml
+
+Watch the pipeline
+	argo watch -nkubeflow @latest
+
+See the pipeline logs
+	argo logs -f -nkubeflow @latest
+

@@ -1,0 +1,141 @@
+# PIPELINE DEFINITION
+# Name: my-first-pipeline
+# Inputs:
+#    p_base: int
+#    p_ex: int
+components:
+  comp-power:
+    executorLabel: exec-power
+    inputDefinitions:
+      parameters:
+        base:
+          parameterType: NUMBER_INTEGER
+        ex:
+          parameterType: NUMBER_INTEGER
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: NUMBER_INTEGER
+  comp-rand-matrix:
+    executorLabel: exec-rand-matrix
+    inputDefinitions:
+      parameters:
+        cols:
+          parameterType: NUMBER_INTEGER
+        rows:
+          parameterType: NUMBER_INTEGER
+        values:
+          parameterType: NUMBER_INTEGER
+    outputDefinitions:
+      parameters:
+        Output:
+          parameterType: STRING
+deploymentSpec:
+  executors:
+    exec-power:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - power
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef power(base: int, ex: int) -> int:\n   answer = 1\n   for i in\
+          \ range(ex):\n      answer = answer * base \n   return answer\n\n"
+        image: python:3.12
+    exec-rand-matrix:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - rand_matrix
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.7.0'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"'  &&\
+          \  python3 -m pip install --quiet --no-warn-script-location 'numpy' 'pandas'\
+          \ && \"$0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef rand_matrix(rows: int, cols: int, values: int) -> str:\n   import\
+          \ numpy as np\n   import json\n\n   mat = np.random.randint(-values, values,\
+          \ (rows, cols))\n   # can only return primitive number, boolean, string\n\
+          \   # convert to JSON string\n   return json.dumps(mat.tolist())\n\n"
+        image: python:3.11
+pipelineInfo:
+  displayName: My first pipeline
+  name: my-first-pipeline
+root:
+  dag:
+    tasks:
+      power:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-power
+        inputs:
+          parameters:
+            base:
+              componentInputParameter: p_base
+            ex:
+              componentInputParameter: p_ex
+        taskInfo:
+          name: power
+      rand-matrix:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-rand-matrix
+        dependentTasks:
+        - power
+        inputs:
+          parameters:
+            cols:
+              componentInputParameter: p_ex
+            rows:
+              componentInputParameter: p_base
+            values:
+              taskOutputParameter:
+                outputParameterKey: Output
+                producerTask: power
+        taskInfo:
+          name: rand-matrix
+  inputDefinitions:
+    parameters:
+      p_base:
+        parameterType: NUMBER_INTEGER
+      p_ex:
+        parameterType: NUMBER_INTEGER
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.7.0
